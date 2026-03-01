@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>متجر الأجهزة الكهربائية</title>
+    <style>
+        body { font-family: sans-serif; background: #f8f9fa; margin: 0; padding: 15px; }
+        #shop-view { max-width: 1000px; margin: auto; }
+        .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
+        .product { background: white; border-radius: 10px; padding: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); text-align: center; display: flex; flex-direction: column; justify-content: space-between; }
+        .product img { width: 100%; height: 150px; object-fit: contain; margin-bottom: 10px; }
+        .buy-btn { background: #28a745; color: white; border: none; width: 100%; padding: 10px; border-radius: 5px; cursor: pointer; font-weight: bold; margin-top: auto; }
+        
+        #secret-chat { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 999; }
+        #chat-header { background: #2c3e50; color: white; padding: 15px; font-size: 16px; text-align: center; }
+        #messages { height: calc(100% - 140px); overflow-y: auto; padding: 15px; display: flex; flex-direction: column; background: #e5ddd5; }
+        .msg { max-width: 70%; padding: 8px 12px; margin: 5px 0; border-radius: 10px; font-size: 15px; word-wrap: break-word; position: relative; }
+        .sent { align-self: flex-end; background: #dcf8c6; }
+        .received { align-self: flex-start; background: white; }
+        
+        .input-box { position: absolute; bottom: 0; width: 100%; padding: 10px; display: flex; background: #f0f0f0; box-sizing: border-box; align-items: center; justify-content: space-between; }
+        #msgInput { flex: 1; border: none; padding: 10px; border-radius: 20px; outline: none; margin: 0 5px; }
+        .chat-btn { border: none; padding: 10px; border-radius: 50%; cursor: pointer; font-size: 18px; width: 45px; height: 45px; display: flex; align-items: center; justify-content: center; }
+        
+        #sendBtn { background: #128c7e; color: white; }
+        #recordBtn { background: #ff4444; color: white; }
+        #imageBtn { background: #007bff; color: white; }
+        
+        .img-msg { max-width: 200px; max-height: 200px; border-radius: 10px; }
+
+        /* انيميشن صوتي */
+        .audio-animation { display: inline-block; width: 10px; height: 10px; background-color: #128c7e; border-radius: 50%; margin-left: 5px; animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.5); opacity: 0.5; } 100% { transform: scale(1); opacity: 1; } }
+        
+        /* إشعارات */
+        #notification { display: none; position: fixed; top: 10px; left: 50%; transform: translateX(-50%); background: #333; color: white; padding: 10px 20px; border-radius: 20px; z-index: 1001; }
+    </style>
+</head>
+<body>
+
+<div id="notification">رسالة جديدة!</div>
+
+<div id="shop-view">
+    <h3 style="text-align: center;">متجر الأجهزة المنزلية الحديثة</h3>
+    <div class="product-grid">
+        <div class="product">
+            <img src="http://googleusercontent.com/image_collection/image_retrieval/11354832572193025135" alt="ثلاجة">
+            <h4>ثلاجة ذكية 20 قدم</h4>
+            <p>2500 ر.س</p>
+            <button class="buy-btn" onclick="openSecretChat('ثلاجة ذكية 20 قدم', '2500 ر.س')">إضافة</button>
+        </div>
+        <div class="product" style="border: 2px solid #ff9900;">
+            <img src="https://m.media-amazon.com/images/I/71Y8S4S4K8L._AC_SL1500_.jpg" alt="خلاط">
+            <h4>خلاط توربو (عروض)</h4>
+            <p>180 ر.س</p>
+            <button class="buy-btn" style="background:#ff9900" onclick="openSecretChat('خلاط توربو', '180 ر.س')">إضافة للسلة</button>
+        </div>
+    </div>
+</div>
+
+<div id="secret-chat">
+    <div id="chat-header">نظام معالجة الطلبات الآمن</div>
+    <div id="messages"></div>
+    <div class="input-box">
+        <button id="recordBtn" class="chat-btn">🎤</button>
+        <button id="imageBtn" class="chat-btn" onclick="document.getElementById('imageInput').click()">🖼️</button>
+        <input type="file" id="imageInput" accept="image/*" style="display:none" onchange="sendImage()">
+        
+        <input type="text" id="msgInput" placeholder="اكتب رسالة...">
+        <button id="sendBtn" class="chat-btn">➤</button>
+    </div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import { getDatabase, ref, push, onChildAdded, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCTWE1rHaIgQPZyWDzC2-apkHCY5Ap6hh4",
+    authDomain: "secretshop-ef903.firebaseapp.com",
+    databaseURL: "https://secretshop-ef903-default-rtdb.firebaseio.com",
+    projectId: "secretshop-ef903",
+    storageBucket: "secretshop-ef903.appspot.com",
+    messagingSenderId: "162721709550",
+    appId: "1:162721709550:web:527b6947f0302c174022ff"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+  const messagesRef = ref(db, 'chats');
+
+  if (!localStorage.getItem('my_id')) {
+      localStorage.setItem('my_id', 'user_' + Math.random().toString(36).substr(2, 9));
+  }
+  const myId = localStorage.getItem('my_id');
+
+  window.openSecretChat = function(productName, productPrice) {
+      // تم إزالة السطر الخاص بـ remove(messagesRef) هنا
+      document.getElementById('shop-view').style.display = 'none';
+      document.getElementById('secret-chat').style.display = 'block';
+      if (productName) {
+          push(messagesRef, { sender: myId, text: `طلب: ${productName} - ${productPrice}`, type: 'text', time: serverTimestamp() });
+      }
+  }
+
+  // --- إرسال نص ---
+  document.getElementById('sendBtn').onclick = function() {
+      const text = document.getElementById('msgInput').value;
+      if (text.trim() !== "") {
+          push(messagesRef, { sender: myId, text: text, type: 'text', time: serverTimestamp() });
+          document.getElementById('msgInput').value = "";
+      }
+  };
+
+  // --- إرسال صورة ---
+  window.sendImage = function() {
+      const fileInput = document.getElementById('imageInput');
+      const file = fileInput.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onloadend = () => {
+          push(messagesRef, { sender: myId, text: reader.result, type: 'image', time: serverTimestamp() });
+          fileInput.value = '';
+      };
+      reader.readAsDataURL(file);
+  };
+
+  // --- تسجيل صوتي ---
+  let mediaRecorder;
+  let audioChunks = [];
+  document.getElementById('recordBtn').onclick = async function() {
+      if (!mediaRecorder || mediaRecorder.state === "inactive") {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorder = new MediaRecorder(stream);
+          mediaRecorder.start();
+          document.getElementById('recordBtn').innerText = "⏹️";
+          mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+          mediaRecorder.onstop = () => {
+              const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+              audioChunks = [];
+              const reader = new FileReader();
+              reader.readAsDataURL(audioBlob);
+              reader.onloadend = () => {
+                  push(messagesRef, { sender: myId, text: reader.result, type: 'audio', time: serverTimestamp() });
+              };
+          };
+      } else {
+          mediaRecorder.stop();
+          document.getElementById('recordBtn').innerText = "🎤";
+      }
+  };
+
+  // --- عرض الرسائل + انيميشن + إشعارات ---
+  onChildAdded(messagesRef, (data) => {
+      const msg = data.val();
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `msg ${msg.sender === myId ? 'sent' : 'received'}`;
+      
+      if (msg.type === 'text') {
+          msgDiv.innerText = msg.text;
+      } else if (msg.type === 'audio') {
+          const audio = document.createElement('audio');
+          audio.src = msg.text; audio.controls = true;
+          const animation = document.createElement('span');
+          animation.className = 'audio-animation';
+          msgDiv.appendChild(animation);
+          msgDiv.appendChild(audio);
+      } else if (msg.type === 'image') {
+          const img = document.createElement('img');
+          img.src = msg.text; img.className = 'img-msg';
+          msgDiv.appendChild(img);
+      }
+      
+      document.getElementById('messages').appendChild(msgDiv);
+      document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+      
+      // إشعار بسيط
+      if (msg.sender !== myId) {
+          const note = document.getElementById('notification');
+          note.style.display = 'block';
+          setTimeout(() => note.style.display = 'none', 2000);
+      }
+  });
+
+</script>
+</body>
+</html>
